@@ -1,0 +1,15 @@
+[project]
+name = "joycaption-beta-one-gguf"
+description = "This project provides a node for ComfyUI to use the JoyCaption-Beta model in GGUF format for image captioning."
+version = "1.0.0"
+license = {file = "LICENSE"}
+dependencies = ["transformers>=4.48.3", "torchvision", "torch", "huggingface-hub", "accelerate", "bitsandbytes"]
+
+[project.urls]
+Repository = "https://github.com/judian17/ComfyUI-joycaption-beta-one-GGUF"
+#  Used by Comfy Registry https://comfyregistry.org
+
+[tool.comfy]
+PublisherId = ""
+DisplayName = "ComfyUI-joycaption-beta-one-GGUF"
+Icon = ""
