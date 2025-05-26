@@ -93,13 +93,13 @@ EXTRA_OPTIONS = [
 	"Do not mention the mood/feeling/etc of the image.", "Explicitly specify the vantage height (eye-level, low-angle worm’s-eye, bird’s-eye, drone, rooftop, etc.).",
 	"If there is a watermark, you must mention it.",
 	"""Your response will be used by a text-to-image model, so avoid useless meta phrases like “This image shows…”, "You are looking at...", etc.""",
-] # This EXTRA_OPTIONS list is no longer directly used by JoyCaptionGGUF node for dropdowns.
+]
 CAPTION_LENGTH_CHOICES = (["any", "very short", "short", "medium-length", "long", "very long"] + [str(i) for i in range(20, 261, 10)])
 
 def build_prompt(caption_type: str, caption_length: str | int, extra_options: list[str], name_input: str) -> str:
 	if caption_type not in CAPTION_TYPE_MAP:
-		print(f"JoyCaption (GGUF) Warning: Unknown caption_type '{caption_type}'. Using default.")
-		default_template_key = list(CAPTION_TYPE_MAP.keys())[0]
+		print(f"Warning: Unknown caption_type '{caption_type}'. Using default.")
+		default_template_key = list(CAPTION_TYPE_MAP.keys())[0] 
 		prompt_templates = CAPTION_TYPE_MAP.get(caption_type, CAPTION_TYPE_MAP[default_template_key])
 	else:
 		prompt_templates = CAPTION_TYPE_MAP[caption_type]
@@ -107,53 +107,17 @@ def build_prompt(caption_type: str, caption_length: str | int, extra_options: li
 	if caption_length == "any": map_idx = 0
 	elif isinstance(caption_length, str) and caption_length.isdigit(): map_idx = 1
 	else: map_idx = 2
-
-	if map_idx >= len(prompt_templates): map_idx = 0
+	
+	if map_idx >= len(prompt_templates): map_idx = 0 
 
 	prompt = prompt_templates[map_idx]
-
-	# Format the prompt first to handle {name} if it's part of the base prompt template
-	# (though typically {name} is expected in extra_options)
+	if extra_options: prompt += " " + " ".join(extra_options)
+	
 	try:
-		prompt = prompt.format(name=name_input or "{NAME}", length=caption_length, word_count=caption_length)
+		return prompt.format(name=name_input or "{NAME}", length=caption_length, word_count=caption_length)
 	except KeyError as e:
-		# If {name} is not in the base prompt, it might be in extra_options, so don't error out yet.
-		# Or, if other keys are missing, this is a genuine error.
-		if 'name' not in str(e).lower(): # Check if the error is specifically about 'name'
-			print(f"JoyCaption (GGUF) Warning: Prompt template formatting error for caption_type '{caption_type}', map_idx {map_idx}. Missing key: {e}")
-			# Return the unformatted prompt with an error message appended
-			return prompt_templates[map_idx] + f" (Base prompt formatting error: missing key {e})"
-
-
-	if extra_options:
-		# Process extra options, some of which might contain {name}
-		processed_extra_options = []
-		for opt in extra_options:
-			try:
-				processed_extra_options.append(opt.format(name=name_input or "{NAME}"))
-			except KeyError as e_opt:
-				# If an extra option has a formatting key other than {name} that's missing, warn and use raw.
-				if 'name' not in str(e_opt).lower():
-					print(f"JoyCaption (GGUF) Warning: Extra option formatting error: '{opt}'. Missing key: {e_opt}")
-					processed_extra_options.append(opt + f" (Extra option formatting error: missing key {e_opt})")
-				else: # If it's just {name} missing and name_input is empty, it's fine.
-					processed_extra_options.append(opt)
-
-
-		prompt += " " + " ".join(processed_extra_options)
-
-	# Final check for any remaining unformatted placeholders if name_input was crucial and not provided
-	# This check is a bit broad, but aims to catch unreplaced {name}, {length}, {word_count}
-	if "{name}" in prompt and not name_input:
-		# This case should ideally be handled by `name=name_input or "{NAME}"`
-		# but as a safeguard if prompt still contains it.
-		pass # It's okay if {name} remains if no name was provided.
-	if "{length}" in prompt and caption_length != "any" and not (isinstance(caption_length, str) and caption_length.isdigit()):
-		print(f"JoyCaption (GGUF) Warning: Prompt template for '{caption_type}' might have unformatted '{{length}}'.")
-	if "{word_count}" in prompt and not (isinstance(caption_length, str) and caption_length.isdigit()):
-		print(f"JoyCaption (GGUF) Warning: Prompt template for '{caption_type}' might have unformatted '{{word_count}}'.")
-
-	return prompt
+		print(f"Warning: Prompt template formatting error for caption_type '{caption_type}', map_idx {map_idx}. Missing key: {e}")
+		return prompt + f" (Formatting error: missing key {e})"
 
 def get_gguf_model_paths(subfolder="llava_gguf"):
     base_models_dir = Path(folder_paths.models_dir)
@@ -174,7 +138,7 @@ def get_mmproj_paths(subfolder="llava_gguf"):
     return sorted([str(p.name) for p in models_path.glob("*.gguf")] + [str(p.name) for p in models_path.glob("*.bin")])
 
 class JoyCaptionPredictorGGUF:
-    def __init__(self, model_name: str, mmproj_name: str, n_gpu_layers: int = 0, n_ctx: int = 2048, seed: int = -1, subfolder="llava_gguf"):
+    def __init__(self, model_name: str, mmproj_name: str, n_gpu_layers: int = 0, n_ctx: int = 2048, subfolder="llava_gguf"):
         self.llm = None
         self.chat_handler_exit_stack = None # Will store the ExitStack of the chat_handler
 
@@ -200,9 +164,9 @@ class JoyCaptionPredictorGGUF:
                 logits_all=True,
                 n_gpu_layers=n_gpu_layers,
                 verbose=False,
-                seed=seed,
+                # seed parameter is not used here, similar to nodes_gguf-old.py
             )
-            print(f"JoyCaption (GGUF): Loaded model {model_name} with mmproj {mmproj_name}, seed {seed}.")
+            print(f"JoyCaption (GGUF): Loaded model {model_name} with mmproj {mmproj_name}.")
         except Exception as e:
             print(f"JoyCaption (GGUF): Error loading GGUF model: {e}")
             if self.chat_handler_exit_stack is not None:
@@ -261,6 +225,95 @@ def _populate_file_lists():
 
 _populate_file_lists()
 
+class JoyCaptionGGUFExtraOptions:
+    CATEGORY = 'JoyCaption'
+    FUNCTION = "generate_options"
+    RETURN_TYPES = ("JJC_GGUF_EXTRA_OPTION",) # Custom type for the output
+    RETURN_NAMES = ("extra_options_gguf",)
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        # These options mirror the structure from the original LS_JoyCaptionBetaExtraOptions for consistency
+        return {
+            "required": {
+                "refer_character_name": ("BOOLEAN", {"default": False}),
+                "exclude_people_info": ("BOOLEAN", {"default": False}),
+                "include_lighting": ("BOOLEAN", {"default": False}),
+                "include_camera_angle": ("BOOLEAN", {"default": False}),
+                "include_watermark_info": ("BOOLEAN", {"default": False}),
+                "include_JPEG_artifacts": ("BOOLEAN", {"default": False}),
+                "include_exif": ("BOOLEAN", {"default": False}),
+                "exclude_sexual": ("BOOLEAN", {"default": False}),
+                "exclude_image_resolution": ("BOOLEAN", {"default": False}),
+                "include_aesthetic_quality": ("BOOLEAN", {"default": False}),
+                "include_composition_style": ("BOOLEAN", {"default": False}),
+                "exclude_text": ("BOOLEAN", {"default": False}),
+                "specify_depth_field": ("BOOLEAN", {"default": False}),
+                "specify_lighting_sources": ("BOOLEAN", {"default": False}),
+                "do_not_use_ambiguous_language": ("BOOLEAN", {"default": False}),
+                "include_nsfw_rating": ("BOOLEAN", {"default": False}),
+                "only_describe_most_important_elements": ("BOOLEAN", {"default": False}),
+                "do_not_include_artist_name_or_title": ("BOOLEAN", {"default": False}),
+                "identify_image_orientation": ("BOOLEAN", {"default": False}),
+                "use_vulgar_slang_and_profanity": ("BOOLEAN", {"default": False}),
+                "do_not_use_polite_euphemisms": ("BOOLEAN", {"default": False}),
+                "include_character_age": ("BOOLEAN", {"default": False}),
+                "include_camera_shot_type": ("BOOLEAN", {"default": False}),
+                "exclude_mood_feeling": ("BOOLEAN", {"default": False}),
+                "include_camera_vantage_height": ("BOOLEAN", {"default": False}),
+                "mention_watermark_explicitly": ("BOOLEAN", {"default": False}),
+                "avoid_meta_descriptive_phrases": ("BOOLEAN", {"default": False}),
+                "character_name": ("STRING", {"default": "", "multiline": False, "placeholder": "e.g., 'Skywalker'"}),
+            }
+        }
+
+    def generate_options(self, **kwargs):
+        # Corresponds to the EXTRA_OPTIONS list, but selected via boolean flags
+        # The original EXTRA_OPTIONS list can serve as a direct source for these strings.
+        # For simplicity, we'll use a direct mapping here.
+        # Note: The original EXTRA_OPTIONS[0] is "", which is a "none" option.
+        # This node structure implies selecting specific phrases.
+        
+        option_map = {
+            "refer_character_name": "If there is a person/character in the image you must refer to them as {name}.",
+            "exclude_people_info": "Do NOT include information about people/characters that cannot be changed (like ethnicity, gender, etc), but do still include changeable attributes (like hair style).",
+            "include_lighting": "Include information about lighting.",
+            "include_camera_angle": "Include information about camera angle.",
+            "include_watermark_info": "Include information about whether there is a watermark or not.", # Corresponds to EXTRA_OPTIONS[4]
+            "include_JPEG_artifacts": "Include information about whether there are JPEG artifacts or not.", # Corresponds to EXTRA_OPTIONS[5]
+            "include_exif": "If it is a photo you MUST include information about what camera was likely used and details such as aperture, shutter speed, ISO, etc.",
+            "exclude_sexual": "Do NOT include anything sexual; keep it PG.",
+            "exclude_image_resolution": "Do NOT mention the image's resolution.",
+            "include_aesthetic_quality": "You MUST include information about the subjective aesthetic quality of the image from low to very high.",
+            "include_composition_style": "Include information on the image's composition style, such as leading lines, rule of thirds, or symmetry.",
+            "exclude_text": "Do NOT mention any text that is in the image.",
+            "specify_depth_field": "Specify the depth of field and whether the background is in focus or blurred.",
+            "specify_lighting_sources": "If applicable, mention the likely use of artificial or natural lighting sources.",
+            "do_not_use_ambiguous_language": "Do NOT use any ambiguous language.",
+            "include_nsfw_rating": "Include whether the image is sfw, suggestive, or nsfw.", # Corresponds to EXTRA_OPTIONS[15]
+            "only_describe_most_important_elements": "ONLY describe the most important elements of the image.",
+            "do_not_include_artist_name_or_title": "If it is a work of art, do not include the artist's name or the title of the work.",
+            "identify_image_orientation": "Identify the image orientation (portrait, landscape, or square) and aspect ratio if obvious.",
+            "use_vulgar_slang_and_profanity": """Use vulgar slang and profanity, such as (but not limited to) "fucking," "slut," "cock," etc.""",
+            "do_not_use_polite_euphemisms": "Do NOT use polite euphemisms—lean into blunt, casual phrasing.",
+            "include_character_age": "Include information about the ages of any people/characters when applicable.",
+            "include_camera_shot_type": "Mention whether the image depicts an extreme close-up, close-up, medium close-up, medium shot, cowboy shot, medium wide shot, wide shot, or extreme wide shot.",
+            "exclude_mood_feeling": "Do not mention the mood/feeling/etc of the image.",
+            "include_camera_vantage_height": "Explicitly specify the vantage height (eye-level, low-angle worm’s-eye, bird’s-eye, drone, rooftop, etc.).",
+            "mention_watermark_explicitly": "If there is a watermark, you must mention it.", # Corresponds to EXTRA_OPTIONS[24]
+            "avoid_meta_descriptive_phrases": """Your response will be used by a text-to-image model, so avoid useless meta phrases like “This image shows…”, "You are looking at...", etc."""
+        }
+
+        selected_options = []
+        character_name = kwargs.pop("character_name", "") # Extract character_name, remove from kwargs
+
+        for key, text_template in option_map.items():
+            if kwargs.get(key, False): # Check if the boolean flag for this option is True
+                selected_options.append(text_template)
+        
+        return ((selected_options, character_name),)
+
+
 class JoyCaptionGGUF:
     @classmethod
     def INPUT_TYPES(cls):
@@ -274,7 +327,7 @@ class JoyCaptionGGUF:
             "temperature": ("FLOAT", {"default": 0.6, "min": 0.0, "max": 2.0, "step": 0.05}),
             "top_p": ("FLOAT", {"default": 0.9, "min": 0.0, "max": 1.0, "step": 0.01}),
             "top_k": ("INT", {"default": 40, "min": 0, "max": 100}),
-            "seed": ("INT", {"default": -1, "min": -1, "max": 0xffffffffffffffff}),
+            "seed": ("INT", {"default": -1, "min": -1, "max": 0xffffffffffffffff}), # Seed input remains, but not used in model_key for now
             "unload_after_generate": ("BOOLEAN", {"default": False}),
         }
         opt = {
@@ -286,15 +339,18 @@ class JoyCaptionGGUF:
 
     def __init__(self):
         self.predictor_gguf = None
-        self.current_model_key = None
+        self.current_model_key = None 
 
-    def generate(self, image, gguf_model, mmproj_file, n_gpu_layers, n_ctx, caption_type, caption_length,
-                 max_new_tokens, temperature, top_p, top_k, seed, unload_after_generate, extra_options_input=None):
+    def generate(self, image, gguf_model, mmproj_file, n_gpu_layers, n_ctx, caption_type, caption_length, 
+                 max_new_tokens, temperature, top_p, top_k, seed, unload_after_generate, extra_options_input=None): # Added seed and extra_options_input
         if gguf_model.startswith("None") or mmproj_file.startswith("None"):
              return ("Error: GGUF model or mmproj file not selected/found.", "Please place models in ComfyUI/models/llava_gguf and select them.")
 
-        model_key = (gguf_model, mmproj_file, n_gpu_layers, n_ctx, seed)
-
+        model_key = (gguf_model, mmproj_file, n_gpu_layers, n_ctx) # model_key does NOT include seed for now
+        
+        # Current seed parameter is unused for model loading/key to maintain stability.
+        # It could be used later if Llama.create_chat_completion supported per-call seed.
+        
         if self.predictor_gguf is None or self.current_model_key != model_key:
             if self.predictor_gguf is not None:
                 if hasattr(self.predictor_gguf, 'chat_handler_exit_stack') and self.predictor_gguf.chat_handler_exit_stack is not None:
@@ -304,40 +360,40 @@ class JoyCaptionGGUF:
                     except Exception as e_close:
                         print(f"JoyCaption (GGUF): Error closing chat_handler_exit_stack (model switch): {e_close}")
                     self.predictor_gguf.chat_handler_exit_stack = None
-
+                
                 if hasattr(self.predictor_gguf, 'llm') and self.predictor_gguf.llm is not None:
                     del self.predictor_gguf.llm
-                    self.predictor_gguf.llm = None
+                    self.predictor_gguf.llm = None # Explicitly set to None
                 
                 del self.predictor_gguf
                 self.predictor_gguf = None
-                gc.collect()
+                gc.collect() 
                 if torch.cuda.is_available(): torch.cuda.empty_cache()
                 print("JoyCaption (GGUF): Old model unloaded (model switch).")
             
             try:
-                self.predictor_gguf = JoyCaptionPredictorGGUF(model_name=gguf_model, mmproj_name=mmproj_file, n_gpu_layers=n_gpu_layers, n_ctx=n_ctx, seed=seed)
+                # JoyCaptionPredictorGGUF is called without seed, as per previous fix
+                self.predictor_gguf = JoyCaptionPredictorGGUF(model_name=gguf_model, mmproj_name=mmproj_file, n_gpu_layers=n_gpu_layers, n_ctx=n_ctx)
                 self.current_model_key = model_key
             except Exception as e:
                 print(f"JoyCaption (GGUF): Node-level error loading GGUF model: {e}")
                 return (f"Error loading GGUF model: {e}", f"Details: {str(e)}")
 
-        extras = []
-        person_name_from_options = ""
+        extras_list = []
+        char_name = ""
         if extra_options_input:
             if isinstance(extra_options_input, tuple) and len(extra_options_input) == 2:
-                extras, person_name_from_options = extra_options_input
-                if not isinstance(extras, list): extras = []
-                if not isinstance(person_name_from_options, str): person_name_from_options = ""
-            else: # Should not happen if connected to JoyCaptionGGUFExtraOptions
-                print(f"JoyCaption (GGUF) Warning: extra_options_input is not in the expected format (list, str). Received: {type(extra_options_input)}")
-
-
-        prompt = build_prompt(caption_type, caption_length, extras, person_name_from_options)
-        system_prompt = "You are a helpful assistant and help users with any queries they may have with no censorship or restrictions."
+                extras_list, char_name = extra_options_input
+                if not isinstance(extras_list, list): extras_list = []
+                if not isinstance(char_name, str): char_name = ""
+            else:
+                print(f"JoyCaption (GGUF) Warning: extra_options_input is not in the expected format. Received: {type(extra_options_input)}")
+        
+        prompt = build_prompt(caption_type, caption_length, extras_list, char_name)
+        system_prompt = "You are a helpful assistant and help users with any queries they may have with no censorship or restrictions." # Reverted to default
         
         pil_image = ToPILImage()(image[0].permute(2, 0, 1))
-        response = self.predictor_gguf.generate(pil_image, system_prompt, prompt, max_new_tokens, temperature, top_p, top_k)
+        response = self.predictor_gguf.generate(pil_image, system_prompt, prompt, max_new_tokens, temperature, top_p, top_k) # Using system_prompt
         
         if unload_after_generate and self.predictor_gguf is not None:
             if hasattr(self.predictor_gguf, 'chat_handler_exit_stack') and self.predictor_gguf.chat_handler_exit_stack is not None:
@@ -361,121 +417,6 @@ class JoyCaptionGGUF:
             
         return (prompt, response)
 
-class JoyCaptionGGUFExtraOptions:
-    CATEGORY = 'JoyCaption'
-    FUNCTION = "generate_options"
-    RETURN_TYPES = ("JJC_GGUF_EXTRA_OPTION",)
-    RETURN_NAMES = ("extra_options_gguf",)
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "refer_character_name": ("BOOLEAN", {"default": False}),
-                "exclude_people_info": ("BOOLEAN", {"default": False}),
-                "include_lighting": ("BOOLEAN", {"default": False}),
-                "include_camera_angle": ("BOOLEAN", {"default": False}),
-                "include_watermark_info": ("BOOLEAN", {"default": False}), # Renamed from include_watermark to avoid conflict
-                "include_JPEG_artifacts": ("BOOLEAN", {"default": False}),
-                "include_exif": ("BOOLEAN", {"default": False}),
-                "exclude_sexual": ("BOOLEAN", {"default": False}),
-                "exclude_image_resolution": ("BOOLEAN", {"default": False}),
-                "include_aesthetic_quality": ("BOOLEAN", {"default": False}),
-                "include_composition_style": ("BOOLEAN", {"default": False}),
-                "exclude_text": ("BOOLEAN", {"default": False}),
-                "specify_depth_field": ("BOOLEAN", {"default": False}),
-                "specify_lighting_sources": ("BOOLEAN", {"default": False}),
-                "do_not_use_ambiguous_language": ("BOOLEAN", {"default": False}),
-                "include_nsfw_rating": ("BOOLEAN", {"default": False}), # Renamed from include_nsfw
-                "only_describe_most_important_elements": ("BOOLEAN", {"default": False}),
-                "do_not_include_artist_name_or_title": ("BOOLEAN", {"default": False}),
-                "identify_image_orientation": ("BOOLEAN", {"default": False}),
-                "use_vulgar_slang_and_profanity": ("BOOLEAN", {"default": False}),
-                "do_not_use_polite_euphemisms": ("BOOLEAN", {"default": False}),
-                "include_character_age": ("BOOLEAN", {"default": False}),
-                "include_camera_shot_type": ("BOOLEAN", {"default": False}),
-                "exclude_mood_feeling": ("BOOLEAN", {"default": False}),
-                "include_camera_vantage_height": ("BOOLEAN", {"default": False}),
-                "mention_watermark_explicitly": ("BOOLEAN", {"default": False}), # Renamed from mention_watermark
-                "avoid_meta_descriptive_phrases": ("BOOLEAN", {"default": False}),
-                "character_name": ("STRING", {"default": "", "multiline": False, "placeholder": "e.g., 'Skywalker'"}),
-            }
-        }
-
-    def generate_options(self, refer_character_name, exclude_people_info, include_lighting, include_camera_angle,
-                         include_watermark_info, include_JPEG_artifacts, include_exif, exclude_sexual,
-                         exclude_image_resolution, include_aesthetic_quality, include_composition_style,
-                         exclude_text, specify_depth_field, specify_lighting_sources,
-                         do_not_use_ambiguous_language, include_nsfw_rating, only_describe_most_important_elements,
-                         do_not_include_artist_name_or_title, identify_image_orientation, use_vulgar_slang_and_profanity,
-                         do_not_use_polite_euphemisms, include_character_age, include_camera_shot_type,
-                         exclude_mood_feeling, include_camera_vantage_height, mention_watermark_explicitly,
-                         avoid_meta_descriptive_phrases, character_name):
-
-        extra_map = {
-            "refer_character_name": "If there is a person/character in the image you must refer to them as {name}.",
-            "exclude_people_info": "Do NOT include information about people/characters that cannot be changed (like ethnicity, gender, etc), but do still include changeable attributes (like hair style).",
-            "include_lighting": "Include information about lighting.",
-            "include_camera_angle": "Include information about camera angle.",
-            "include_watermark_info": "Include information about whether there is a watermark or not.",
-            "include_JPEG_artifacts": "Include information about whether there are JPEG artifacts or not.",
-            "include_exif": "If it is a photo you MUST include information about what camera was likely used and details such as aperture, shutter speed, ISO, etc.",
-            "exclude_sexual": "Do NOT include anything sexual; keep it PG.",
-            "exclude_image_resolution": "Do NOT mention the image's resolution.",
-            "include_aesthetic_quality": "You MUST include information about the subjective aesthetic quality of the image from low to very high.",
-            "include_composition_style": "Include information on the image's composition style, such as leading lines, rule of thirds, or symmetry.",
-            "exclude_text": "Do NOT mention any text that is in the image.",
-            "specify_depth_field": "Specify the depth of field and whether the background is in focus or blurred.",
-            "specify_lighting_sources": "If applicable, mention the likely use of artificial or natural lighting sources.",
-            "do_not_use_ambiguous_language": "Do NOT use any ambiguous language.",
-            "include_nsfw_rating": "Include whether the image is sfw, suggestive, or nsfw.",
-            "only_describe_most_important_elements": "ONLY describe the most important elements of the image.",
-            "do_not_include_artist_name_or_title": "If it is a work of art, do not include the artist's name or the title of the work.",
-            "identify_image_orientation": "Identify the image orientation (portrait, landscape, or square) and aspect ratio if obvious.",
-            "use_vulgar_slang_and_profanity": """Use vulgar slang and profanity, such as (but not limited to) "fucking," "slut," "cock," etc.""",
-            "do_not_use_polite_euphemisms": "Do NOT use polite euphemisms—lean into blunt, casual phrasing.",
-            "include_character_age": "Include information about the ages of any people/characters when applicable.",
-            "include_camera_shot_type": "Mention whether the image depicts an extreme close-up, close-up, medium close-up, medium shot, cowboy shot, medium wide shot, wide shot, or extreme wide shot.",
-            "exclude_mood_feeling": "Do not mention the mood/feeling/etc of the image.",
-            "include_camera_vantage_height": "Explicitly specify the vantage height (eye-level, low-angle worm’s-eye, bird’s-eye, drone, rooftop, etc.).",
-            "mention_watermark_explicitly": "If there is a watermark, you must mention it.",
-            "avoid_meta_descriptive_phrases": """Your response will be used by a text-to-image model, so avoid useless meta phrases like “This image shows…”, "You are looking at...", etc."""
-        }
-        
-        selected_options = []
-        # Iterate through the input arguments of this method (excluding self and character_name)
-        # This is a bit manual; could use inspect if more dynamic behavior is needed.
-        if refer_character_name: selected_options.append(extra_map["refer_character_name"])
-        if exclude_people_info: selected_options.append(extra_map["exclude_people_info"])
-        if include_lighting: selected_options.append(extra_map["include_lighting"])
-        if include_camera_angle: selected_options.append(extra_map["include_camera_angle"])
-        if include_watermark_info: selected_options.append(extra_map["include_watermark_info"])
-        if include_JPEG_artifacts: selected_options.append(extra_map["include_JPEG_artifacts"])
-        if include_exif: selected_options.append(extra_map["include_exif"])
-        if exclude_sexual: selected_options.append(extra_map["exclude_sexual"])
-        if exclude_image_resolution: selected_options.append(extra_map["exclude_image_resolution"])
-        if include_aesthetic_quality: selected_options.append(extra_map["include_aesthetic_quality"])
-        if include_composition_style: selected_options.append(extra_map["include_composition_style"])
-        if exclude_text: selected_options.append(extra_map["exclude_text"])
-        if specify_depth_field: selected_options.append(extra_map["specify_depth_field"])
-        if specify_lighting_sources: selected_options.append(extra_map["specify_lighting_sources"])
-        if do_not_use_ambiguous_language: selected_options.append(extra_map["do_not_use_ambiguous_language"])
-        if include_nsfw_rating: selected_options.append(extra_map["include_nsfw_rating"])
-        if only_describe_most_important_elements: selected_options.append(extra_map["only_describe_most_important_elements"])
-        if do_not_include_artist_name_or_title: selected_options.append(extra_map["do_not_include_artist_name_or_title"])
-        if identify_image_orientation: selected_options.append(extra_map["identify_image_orientation"])
-        if use_vulgar_slang_and_profanity: selected_options.append(extra_map["use_vulgar_slang_and_profanity"])
-        if do_not_use_polite_euphemisms: selected_options.append(extra_map["do_not_use_polite_euphemisms"])
-        if include_character_age: selected_options.append(extra_map["include_character_age"])
-        if include_camera_shot_type: selected_options.append(extra_map["include_camera_shot_type"])
-        if exclude_mood_feeling: selected_options.append(extra_map["exclude_mood_feeling"])
-        if include_camera_vantage_height: selected_options.append(extra_map["include_camera_vantage_height"])
-        if mention_watermark_explicitly: selected_options.append(extra_map["mention_watermark_explicitly"])
-        if avoid_meta_descriptive_phrases: selected_options.append(extra_map["avoid_meta_descriptive_phrases"])
-
-        return ((selected_options, character_name or ""),)
-
-
 class JoyCaptionCustomGGUF:
     @classmethod
     def INPUT_TYPES(cls):
@@ -489,7 +430,7 @@ class JoyCaptionCustomGGUF:
             "temperature": ("FLOAT", {"default": 0.6, "min": 0.0, "max": 2.0, "step": 0.05}),
             "top_p": ("FLOAT", {"default": 0.9, "min": 0.0, "max": 1.0, "step": 0.01}),
             "top_k": ("INT", {"default": 40, "min": 0, "max": 100}),
-            "seed": ("INT", {"default": -1, "min": -1, "max": 0xffffffffffffffff}),
+            "seed": ("INT", {"default": -1, "min": -1, "max": 0xffffffffffffffff}), # Seed input, not used in model_key for now
             "unload_after_generate": ("BOOLEAN", {"default": False}),
         }
         opt = {
@@ -503,23 +444,23 @@ class JoyCaptionCustomGGUF:
         self.predictor_gguf = None
         self.current_model_key = None
 
-    def generate(self, image, gguf_model, mmproj_file, n_gpu_layers, n_ctx, system_prompt, user_query,
-                 max_new_tokens, temperature, top_p, top_k, seed, unload_after_generate, extra_options_input=None):
+    def generate(self, image, gguf_model, mmproj_file, n_gpu_layers, n_ctx, system_prompt, user_query, 
+                 max_new_tokens, temperature, top_p, top_k, seed, unload_after_generate, extra_options_input=None): # Added seed and extra_options_input
         if gguf_model.startswith("None") or mmproj_file.startswith("None"):
              return ("Error: GGUF model or mmproj file not selected/found. Please place models in ComfyUI/models/llava_gguf and select them.",)
 
-        model_key = (gguf_model, mmproj_file, n_gpu_layers, n_ctx, seed)
+        model_key = (gguf_model, mmproj_file, n_gpu_layers, n_ctx) # model_key does NOT include seed for now
 
         if self.predictor_gguf is None or self.current_model_key != model_key:
             if self.predictor_gguf is not None:
                 if hasattr(self.predictor_gguf, 'chat_handler_exit_stack') and self.predictor_gguf.chat_handler_exit_stack is not None:
                     try:
-                        print("JoyCaption (GGUF): Manually closing chat_handler_exit_stack (model switch - custom node).")
+                        print("JoyCaption (GGUF Custom): Manually closing chat_handler_exit_stack (model switch).")
                         self.predictor_gguf.chat_handler_exit_stack.close()
                     except Exception as e_close:
-                        print(f"JoyCaption (GGUF): Error closing chat_handler_exit_stack (model switch - custom node): {e_close}")
+                        print(f"JoyCaption (GGUF Custom): Error closing chat_handler_exit_stack (model switch): {e_close}")
                     self.predictor_gguf.chat_handler_exit_stack = None
-
+                
                 if hasattr(self.predictor_gguf, 'llm') and self.predictor_gguf.llm is not None:
                     del self.predictor_gguf.llm
                     self.predictor_gguf.llm = None # Explicitly set to None
@@ -528,38 +469,43 @@ class JoyCaptionCustomGGUF:
                 self.predictor_gguf = None
                 gc.collect()
                 if torch.cuda.is_available(): torch.cuda.empty_cache()
-                print("JoyCaption (GGUF): Old model unloaded (model switch - custom node).")
-
+                print("JoyCaption (GGUF Custom): Old model unloaded (model switch).")
+            
             try:
-                self.predictor_gguf = JoyCaptionPredictorGGUF(model_name=gguf_model, mmproj_name=mmproj_file, n_gpu_layers=n_gpu_layers, n_ctx=n_ctx, seed=seed)
+                # JoyCaptionPredictorGGUF is called without seed
+                self.predictor_gguf = JoyCaptionPredictorGGUF(model_name=gguf_model, mmproj_name=mmproj_file, n_gpu_layers=n_gpu_layers, n_ctx=n_ctx)
                 self.current_model_key = model_key
             except Exception as e:
-                print(f"JoyCaption (GGUF Custom): Node-level error loading GGUF model: {e}")
+                print(f"JoyCaption (GGUF Custom): Node-level error loading GGUF model: {e}") # Changed print prefix
                 return (f"Error loading GGUF model: {e}",)
 
         final_user_query = user_query.strip()
+        char_name = "" # Default if no extra options
         
         if extra_options_input:
             if isinstance(extra_options_input, tuple) and len(extra_options_input) == 2:
-                extras, person_name_from_options = extra_options_input
-                if not isinstance(extras, list): extras = []
-                if not isinstance(person_name_from_options, str): person_name_from_options = ""
+                extras_list, char_name_from_input = extra_options_input
+                if not isinstance(extras_list, list): extras_list = []
+                if not isinstance(char_name_from_input, str): char_name_from_input = ""
+                else: char_name = char_name_from_input # Use character name from options
 
                 processed_extra_options = []
-                for opt_str in extras:
+                for opt_str in extras_list:
                     try:
-                        processed_extra_options.append(opt_str.format(name=person_name_from_options or "{NAME}"))
+                        # Format with character_name if placeholder exists
+                        processed_extra_options.append(opt_str.format(name=char_name if char_name else "{NAME}"))
                     except KeyError as e_opt:
-                        if 'name' not in str(e_opt).lower(): # Check if the error is specifically about 'name'
-                            print(f"JoyCaption (GGUF Custom) Warning: Extra option formatting error: '{opt_str}'. Missing key: {e_opt}")
-                            processed_extra_options.append(opt_str + f" (Extra option formatting error: missing key {e_opt})")
-                        else: # If it's just {name} missing and name_input is empty, it's fine.
-                            processed_extra_options.append(opt_str)
-                
+                        # Handle cases where format key is not 'name' or other issues
+                        if 'name' not in str(e_opt).lower():
+                             print(f"JoyCaption (GGUF Custom) Warning: Extra option formatting error: '{opt_str}'. Missing key: {e_opt}")
+                             processed_extra_options.append(opt_str + f" (Extra option formatting error: missing key {e_opt})")
+                        else: # If it's just {name} and char_name is empty, keep {NAME} or the raw string
+                             processed_extra_options.append(opt_str)
+
                 if processed_extra_options:
                     final_user_query += " " + " ".join(processed_extra_options)
             else:
-                print(f"JoyCaption (GGUF Custom) Warning: extra_options_input is not in the expected format (list, str). Received: {type(extra_options_input)}")
+                print(f"JoyCaption (GGUF Custom) Warning: extra_options_input is not in the expected format. Received: {type(extra_options_input)}")
         
         pil_image = ToPILImage()(image[0].permute(2, 0, 1))
         response = self.predictor_gguf.generate(pil_image, system_prompt.strip(), final_user_query, max_new_tokens, temperature, top_p, top_k)
@@ -567,10 +513,10 @@ class JoyCaptionCustomGGUF:
         if unload_after_generate and self.predictor_gguf is not None:
             if hasattr(self.predictor_gguf, 'chat_handler_exit_stack') and self.predictor_gguf.chat_handler_exit_stack is not None:
                 try:
-                    print("JoyCaption (GGUF): Manually closing chat_handler_exit_stack (unload_after_generate - custom node).")
+                    print("JoyCaption (GGUF Custom): Manually closing chat_handler_exit_stack (unload_after_generate).")
                     self.predictor_gguf.chat_handler_exit_stack.close()
                 except Exception as e_close:
-                    print(f"JoyCaption (GGUF): Error closing chat_handler_exit_stack (unload_after_generate - custom node): {e_close}")
+                    print(f"JoyCaption (GGUF Custom): Error closing chat_handler_exit_stack (unload_after_generate): {e_close}")
                 self.predictor_gguf.chat_handler_exit_stack = None
 
             if hasattr(self.predictor_gguf, 'llm') and self.predictor_gguf.llm is not None:
@@ -583,6 +529,6 @@ class JoyCaptionCustomGGUF:
             gc.collect()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
-            print("JoyCaption (GGUF): Model unloaded, chat_handler_exit_stack closed, GC run, CUDA cache emptied (unload_after_generate - custom node).")
+            print("JoyCaption (GGUF Custom): Model unloaded, chat_handler_exit_stack closed, GC run, CUDA cache emptied (unload_after_generate).")
             
         return (response,)
