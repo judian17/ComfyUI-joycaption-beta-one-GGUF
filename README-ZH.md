@@ -8,6 +8,9 @@
 
 感谢[layerstyleadvance](https://github.com/chflame163/ComfyUI_LayerStyle_Advance)节点，我从中复制了extra options相关代码
 
+**20250802-更新：**
+由于安装gpu版本的llama-cpp-python比较困难，我将模型上传至ollama，现在可以通过安装[ollama](https://ollama.com/)与[comfyui-ollama](https://github.com/stavsap/comfyui-ollama)来使用。模型链接：https://ollama.com/aha2025/llama-joycaption-beta-one-hf-llava  同时我将提示词模板分离为一个单独的节点，详情可查看[ComfyUI JoyCaption-Beta-GGUF](https://github.com/judian17/ComfyUI-JoyCaption-beta-one-hf-llava-Prompt_node) 节点
+
 ## 使用方法
 
 ### 安装依赖
