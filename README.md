@@ -10,6 +10,10 @@ This node is based on [fpgaminer/joycaption_comfyui](https://github.com/fpgamine
 
 Thanks to the [LayerStyleAdvance](https://github.com/chflame163/ComfyUI_LayerStyle_Advance), I copied the relevant code for extra options from it.
 
+**20250802-Update:**
+
+Due to the difficulty of installing the GPU version of llama-cpp-python, I have uploaded the model to Ollama. You can now use it by installing [Ollama](https://ollama.com/) and [comfyui-ollama](https://github.com/stavsap/comfyui-ollama). Model link: https://ollama.com/aha2025/llama-joycaption-beta-one-hf-llava  Meanwhile, I've separated the prompt template into a standalone node. For details, please check the [ComfyUI JoyCaption-Beta-GGUF](https://github.com/judian17/ComfyUI-JoyCaption-beta-one-hf-llava-Prompt_node).
+
 ## Usage
 
 ### Installation
